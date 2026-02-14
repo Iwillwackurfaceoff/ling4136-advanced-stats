@@ -50,7 +50,7 @@ Let's load in the data and have a look:
 ```{r}
 #| label: load-in
 
-incomplete <- read_csv("../../data/incomplete_perception.csv") |> 
+incomplete <- read_csv("../data/incomplete_perception.csv") |> 
   # preprocessing the data such that everything that ought to be a factor is one
   mutate(listener = as.factor(listener),
          voice = as.factor(voice), 
@@ -88,6 +88,9 @@ Build that model with the appropriate random effect structure, taking into accou
 #| label: glmer_incomplete
 
 # YOUR CODE HERE
+library(lme4)
+model <- glmer(chosen_voicing ~ correct_voicing + (1 | listener) + (1 | item_pair) + (1 | voice), data = incomplete, family = binomial)
+summary(model)
 
 ```
 
@@ -99,7 +102,15 @@ Interpret the model coefficients and calculate p-values for the relevant predict
 #| label: interpretation
 
 # YOUR CODE HERE
+model_null <- glmer(chosen_voicing ~ 1 + (1 | listener) + (1 | item_pair) + (1 | voice), 
+                    data = incomplete, family = binomial)
 
+anova(model_null, model, test = "Chisq")
+# I have used GLMM to analyse the perception of sound. The dependent variable is chosen_voicing and is predicted by the fixed effect, correct_voicing. To control the non-independence of observations, the model included a maximal random effect structure, including random intercepts for listener, item_pair, and voice. Using random effects helps the model separate the variance of individuals and stimuli from the main effect.
+
+# From the results of the model, it shows that correct_voicing has a high statistical value. The Estimate is 0.52, which is a positive value predicting that when correct_voicing changed from voiced to voiceless, there was a higher chance participants chose voiceless. While the intercept is -0.03 (p = 0.908), this means that there isn't any response bias toward one side during the experiment; the participants reacted based on the sound stimuli rather than blindly choosing an answer.
+
+# Based on the random effects, the voice variance is 0.79, which shows that the quality of pronunciation or the phonetic details of the voice affected significantly whether participants recognized the sound correctly. To re-evaluate the validity of the theory, I have conducted a likelihood ratio test by comparing the full model with a null model only consisting of random effects. The result shows that the model with correct_voicing explains the data better and more clearly. The significant decrease of AIC from 7130 to 7052 once again confirms that correct_voicing is a necessary factor to explain how listeners process sound in this experiment.
 ```
 
 ### (C) Plot predictions
@@ -112,7 +123,19 @@ Estimating variance components for linear mixed effects models is mathematically
 #| label: plot_prediction_in
 
 # YOUR CODE HERE
-
+library(ggeffects)
+library(ggplot2)
+pred_data <- predict_response(model, terms = "correct_voicing")
+ggplot(pred_data, aes(x=x,y= predicted)) +
+  geom_point(size = 4, color = "royalblue") + geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1, color = "royalblue") +
+  labs(
+    title = "Predicted Probability of Choosing 'Voiceless'",
+    subtitle = "Based on Intended Voicing (Correct Voicing)",
+    x = "Intended Voicing (Speaker's Intent)",
+    y = "Probability of Choosing 'Voiceless'"
+  ) +
+  ylim(0, 1) + 
+  theme_minimal()
 ```
 
 ### (D) OPTIONAL Plot variation across grouping variables
