@@ -9,7 +9,7 @@ execute:
   warning: false
   message: false
   cache: false
-bibliography: ../../resources/bibliography.bib
+bibliography: ../resources/bibliography.bib
 ---
 
 # Preamble: Loading packages and configuration
@@ -89,7 +89,7 @@ Build that model with the appropriate random effect structure, taking into accou
 
 # YOUR CODE HERE
 library(lme4)
-model <- glmer(chosen_voicing ~ correct_voicing + (1 | listener) + (1 | item_pair) + (1 | voice), data = incomplete, family = binomial)
+model <- glmer(chosen_voicing ~ correct_voicing + (1 + correct_voicing| listener) + (1 | item_pair) + (1 | voice), data = incomplete, family = binomial)
 summary(model)
 
 ```
