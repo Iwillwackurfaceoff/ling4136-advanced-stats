@@ -50,6 +50,7 @@ Winter, B., & Matlock, T. (2013). Making judgments based on similarity and proxi
 
 # Load our datasets
 sim <- read_csv("../data/linguistic_similarity.csv")
+sim
 
 ```
 
@@ -63,6 +64,11 @@ Let's visualize the raw `Distance` distribution for both `Sem` categories making
 #| label: show_overall_distribution
 
 # YOUR CODE HERE
+sim |>
+  ggplot(aes(x=Sem)) +
+  geom_density(fill='yellow') +
+  theme_minimal()
+
 
 ```
 
