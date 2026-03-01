@@ -65,10 +65,12 @@ Let's visualize the raw `Distance` distribution for both `Sem` categories making
 
 # YOUR CODE HERE
 sim |>
-  ggplot(aes(x=Sem)) +
-  geom_density(fill='yellow') +
+  ggplot(aes(x=Distance, fill = Sem)) +
+  geom_density(alpha = 0.5) +
+  scale_fill_manual(values = c("red","skyblue")) +
   theme_minimal()
-
+#Description
+##The raw data distribution is right-skewed and constrained between 0 and 214 mm. While both categories share a primary peak around 75-80 mm, the Similar group exhibits a higher density of shorter distances (0-50 mm). In contrast, the Different group shows more pronounced 'bumps' at larger distances (around 125 mm and 170 mm), indicating a more spread-out estimation for semantically different pairs.
 
 ```
 
@@ -103,7 +105,7 @@ Ignore for now that you might generate values that are impossible at the tails o
 ```{r}
 #| label: prior_exploration
 
-plot_normal(#YOUR PARAMETER CHOICES HERE
+plot_normal(mean = 100, sd = 50
   )
 
 ```
@@ -115,7 +117,11 @@ Now based on your exploration, specify priors. Remember what the two coefficient
 ```{r}
 #| label: spec_priors
 
-my_priors <- #YOUR PRIORS HERE
+my_priors <- c(
+  prior(normal(100,50), class = "Intercept"),
+  prior(normal(0,50), class = "b"),
+  prior(normal(0,50), class = "sigma")
+)
 
 ```
 
@@ -128,7 +134,7 @@ Add your priors to the model below. We will run the model and sample only from o
 
 xmdl_prior <- brm(Distance ~ Sem,
             family = gaussian(),
-            #prior = #YOUR PRIORS HERE
+            prior = my_priors,
             sample_prior = "only",
             data = sim,
             seed = 42)
@@ -162,6 +168,28 @@ If you are happy with your priors, run the full model and plot the posteriors ju
 
 # YOUR CODE HERE
 
+xmdl_prior <- brm(Distance ~ Sem,
+            family = gaussian(),
+            prior = my_priors,
+            data = sim,
+            seed = 42)
+
+
+# We do a little wrangling to get it into a nice shape
+xmdl_prior |> 
+  # first extract the samples
+  spread_draws(b_Intercept, b_SemSimilar) |> 
+  # Create two columns that represent the two SEM categories
+  mutate(Different = b_Intercept,
+         Similar = b_Intercept + b_SemSimilar) |> 
+  # and then bring into a long format like the data
+  select(Different, Similar) |> 
+  pivot_longer(everything(), names_to = "Sem", values_to = "Distance") |> 
+  # now we plot
+  ggplot(aes(x = Distance, fill = Sem)) +
+    geom_density(alpa = 0.6) +
+    facet_wrap(Sem ~ .)
+
 ```
 
 After seeing the data the very diffuse priors have given way to much more narrow and shifted posteriors.
@@ -193,7 +221,7 @@ Describe whether the data (dark line) and the posterior samples (light blue line
 pp_check(xmdl, ndraws = 100)
 
 # YOUR ASSESSMENT HERE
-
+# I would say that based on the model the matchup between the data and the posterior sample would be the central mass, where the samples successfully capture the mean value of the data, rougly around 75 to 80mm. However, the model fails to reproduce the physical boundaries of the task, leading to a significant mismatcg at the left tail of the distribution, where the samples indicate that the value may reduce to negative number which is not realistic statistically. Additionally, the model didn't capture the asymetry of the data. While the data possesses a small uneven bump on the right side around 150-200mm, the Gaussian model's symmetry forces the posterior samples to decrease too quickly, missing the bulge in the actual distribution.
 ```
 
 # OPTIONAL (F) fix the assumption violation
