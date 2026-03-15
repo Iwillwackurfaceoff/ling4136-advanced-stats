@@ -1,0 +1,190 @@
+---
+title: "session08 - homework"
+format: html
+editor: visual
+date: 2025-07-17
+author: Timo Roettger
+execute:
+  error: false
+  warning: false
+  message: false
+  cache: true
+bibliography: ../resources/bibliography.bib
+---
+
+# Preamble: Loading packages and configuration
+
+```{r}
+#| label: data_and_libraries
+#| echo: false
+
+# just run this code chunk
+# function to ignoring the setting of the relative path below when knitting
+run_if_not_knitting <- function(expr) {
+  if (!isTRUE(getOption("knitr.in.progress"))) {
+    eval(expr)
+  }
+}
+
+# nifty code using the pacman package
+# it checks if the packages specified below are installed, if not, they will be installed, if yes, they will be loaded
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rstudioapi, tidyverse, tidybayes, brms, bayesplot, bayestestR, modelr)
+
+# set the current working directory to the one where this file is
+run_if_not_knitting(current_working_dir <- dirname(rstudioapi::getActiveDocumentContext()$path))
+run_if_not_knitting(setwd(current_working_dir))
+
+# options to increase efficiency of brms models (optional)
+#options(brms.backend = "cmdstanr")
+options(mc.cores = parallel::detectCores())
+
+```
+
+# Exercise
+
+We will be re-analyzing the data from @winter2013making.
+
+```{r}
+#| label: preprocessing_sim
+
+# Load our datasets
+sim <- read_csv("../data/linguistic_similarity.csv") |> 
+  mutate(Sem = as.factor(Sem),
+         Phon = as.factor(Phon))
+sim
+
+```
+
+We will now retrace the original article's complete analysis. In their original analysis, they were interested in whether (a) semantic similarity between cities, (b) phonological similarity between cities, and (c) their interaction affects how close/far apart participants draw the cities.
+
+## (a) Specify Priors
+
+Specify the model formula and appropriate weakly informative priors for all relevant predictors. Contrast-code the predictors.
+
+```{r}
+#| label: model_formula_sim.
+my_formula <- bf(Distance~ Sem * Phon)
+get_prior(my_formula, data= sim)
+my_priors <-c(
+  prior(normal(77, 50), class = 'Intercept'),
+  prior(normal(0, 40), class = 'b'),
+  prior(exponential(0.025), class = 'sigma')
+)
+
+
+```
+
+## (b) Run the appropriate model for the research question
+
+```{r}
+#| label: model_sim
+
+#YOUR MODEL HERE
+
+model_sim <- brm(
+  formula = Distance ~ Sem * Phon, 
+  data = sim,
+  prior = my_priors,
+  family = gaussian(),    
+  chains = 4,               
+  iter = 2000,              
+  warmup = 1000,            
+  cores = parallel::detectCores(), 
+  seed = 2511                
+)
+summary(model_sim)
+
+```
+
+## (c) Posterior predicive check
+
+Check the overall model fit with posterior predictive checks. If the model does not fit the data well, fix the problem (check `06_homework_solutions.qmd` for inspiration).
+
+```{r}
+#| label: model_fit
+
+#YOUR CODE HERE
+
+pp_check(model_sim, ndraws = 100)
+library(tidyverse)
+
+sim <- sim %>% 
+  mutate(sqrt_dist = sqrt(Distance))
+my_priors2 <- c(prior(normal(8.8, 2), class = "Intercept"), 
+  prior(normal(0, 2), class = "b"),
+  prior(exponential(0.2), class = "sigma")
+)
+xmdl_sqrt <- brm(sqrt_dist ~ Sem*Phon,
+             file = "../models/sqrt_sim.RDS",
+            prior = my_priors2,
+            data = sim,
+            chains = 4,
+            cores = 4, 
+            iter = 2000,
+            warmup = 1000,
+            thin = 1,
+            seed = 42)
+pp_check(xmdl_sqrt, ndraws = 100)
+
+```
+
+## (d) Assess sampling diagnostics
+
+Check that chains are reasonably mixed and that sampling yielded a sufficient number of effective sample size. If there are issues, address them accordingly.
+
+```{r}
+#| label: sampling_diagnostics
+
+# YOUR CODE HERE
+
+mcmc_plot(xmdl_sqrt, type = "trace")
+summary(xmdl_sqrt)
+
+
+
+
+```
+
+## (e) Interpret the results
+
+Now interpret the model relative to the research question and describe uncertainty, visualize posteriors, calculate posterior probabilities of direction, and calculate Bayes Factors for evidence for and against the posterior coefficients being point zero.
+
+(Note: When you want to extract interaction terms like `b_Sem1:Phon1`, you have to put single quotation marks around them because R struggles with interpreting the colon)
+
+```{r}
+#| label: interpret_sim
+
+#YOUR CODE HERE
+
+p_direction(xmdl_sqrt)
+library(bayestestR)
+bf_results <- bayesfactor_parameters(xmdl_sqrt)
+print(bf_results)
+bayesfactor_parameters(xmdl_sqrt, prior = xmdl_sqrt, direction = "two-sided")
+# The results support the hypothesis that semantic similarity between triggers facilitates processing, as evidenced by the significant reduction in drawing distance (b = -0.68, pd = 99.7%). The Bayes Factor (BF10 = 3.68) provides moderate evidence in favor of this effect. However, the evidence for phonological similarity and its interaction with semantics was less conclusive, suggesting that semantic overlap is the primary driver in reducing processing pressure when participants estimate distances between cities.
+
+
+
+```
+
+## (g) Write up your entire analysis:
+
+`<<<<<<< HEAD` YOUR WRITE UP HERE: To investigate the effects of semantic and phonological similarity on drawing distance, I first defined the model formula as Distance \~ Sem \* Phon. To guide the estimation, I specified data-informed priors based on the scale of the raw drawing distances. For the Intercept, I set a normal(77, 50) prior, where 77 reflects the average distance observed in the descriptive statistics. For the coefficients (b), a conservative normal(0, 40) was chosen, and for sigma, an exponential(0.025) prior was applied to ensure a plausible error distribution (targeting an expected residual around 40 units). Initially, a linear model with a Gaussian family was fitted. However, posterior predictive checks indicated that the model failed to respect the physical boundaries of the data (predicting impossible negative distances) and did not capture the distribution's peak accurately. To address this, a Square Root Transformation was applied to the dependent variable. This transformation successfully constrained the predictions to positive values and improved the model's fit. The sampling process was also very healthy, with all $\hat{R}$ values hitting 1.00, meaning the chains converged properly. With an effective sample size (Bulk-ESS) of over 3000, we have more than enough "quality" samples to be confident that these results aren't just random noise. The model shows that semantic similarity has a clear negative effect on drawing distance, with an estimate of -0.68. What’s really convincing is the 95% Credible Interval, which ranges from -1.19 to -0.19. Since this entire range stays well below zero, we can be quite sure that the effect is real. In plain terms, when the triggers are semantically similar, participants consistently draw the cities closer together. The evidence gets even stronger when looking at the Probability of Direction (pd), which is a high 99.70%. This tells us it's almost certain that the effect is negative. Additionally, a Bayes Factor of 3.68 gives us "moderate evidence" that including semantic similarity makes for a better model than assuming no effect at all. Overall, the results back up the idea that semantic overlap makes the task easier to process, leading participants to perceive or represent the distance as shorter.
+
+# OPTIONAL (h) compare your interpretation to the original findings
+
+YOUR WRITE UP HERE
+
+## OPTIONAL (h) compare your interpretation to the original findings
+
+`>>>>>>> d6a130f17d996ec2bda1e007a639b5763ec4f4ae`
+
+YOUR COMPARISON HERE
+
+# References
+
+<!-- References will auto-populate in the refs div below -->
+
+::: {#refs}
+:::
