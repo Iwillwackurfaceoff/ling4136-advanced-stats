@@ -77,6 +77,7 @@ Figure <- data |>
   theme_minimal() +
   theme(legend.position = "right",
         axis.line = element_blank())
+Figure
 
 ggsave(filename = "../plots/Figure.png", 
        plot = Figure,

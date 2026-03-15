@@ -81,6 +81,7 @@ my_priors <-c(
 #| label: model_sim
 
 #YOUR MODEL HERE
+
 model_sim <- brm(
   formula = Distance ~ Sem * Phon, 
   data = sim,
@@ -93,6 +94,7 @@ model_sim <- brm(
   seed = 2511                
 )
 summary(model_sim)
+
 ```
 
 ## (c) Posterior predicive check
@@ -103,6 +105,7 @@ Check the overall model fit with posterior predictive checks. If the model does 
 #| label: model_fit
 
 #YOUR CODE HERE
+
 pp_check(model_sim, ndraws = 100)
 library(tidyverse)
 
@@ -123,6 +126,7 @@ xmdl_sqrt <- brm(sqrt_dist ~ Sem*Phon,
             thin = 1,
             seed = 42)
 pp_check(xmdl_sqrt, ndraws = 100)
+
 ```
 
 ## (d) Assess sampling diagnostics
@@ -133,8 +137,11 @@ Check that chains are reasonably mixed and that sampling yielded a sufficient nu
 #| label: sampling_diagnostics
 
 # YOUR CODE HERE
+
 mcmc_plot(xmdl_sqrt, type = "trace")
 summary(xmdl_sqrt)
+
+
 
 
 ```
@@ -149,19 +156,29 @@ Now interpret the model relative to the research question and describe uncertain
 #| label: interpret_sim
 
 #YOUR CODE HERE
+
 p_direction(xmdl_sqrt)
 library(bayestestR)
 bf_results <- bayesfactor_parameters(xmdl_sqrt)
 print(bf_results)
 bayesfactor_parameters(xmdl_sqrt, prior = xmdl_sqrt, direction = "two-sided")
 # The results support the hypothesis that semantic similarity between triggers facilitates processing, as evidenced by the significant reduction in drawing distance (b = -0.68, pd = 99.7%). The Bayes Factor (BF10 = 3.68) provides moderate evidence in favor of this effect. However, the evidence for phonological similarity and its interaction with semantics was less conclusive, suggesting that semantic overlap is the primary driver in reducing processing pressure when participants estimate distances between cities.
+
+
+
 ```
 
 ## (g) Write up your entire analysis:
 
-YOUR WRITE UP HERE: To investigate the effects of semantic and phonological similarity on drawing distance, I first defined the model formula as Distance \~ Sem \* Phon. To guide the estimation, I specified data-informed priors based on the scale of the raw drawing distances. For the Intercept, I set a normal(77, 50) prior, where 77 reflects the average distance observed in the descriptive statistics. For the coefficients (b), a conservative normal(0, 40) was chosen, and for sigma, an exponential(0.025) prior was applied to ensure a plausible error distribution (targeting an expected residual around 40 units). Initially, a linear model with a Gaussian family was fitted. However, posterior predictive checks indicated that the model failed to respect the physical boundaries of the data (predicting impossible negative distances) and did not capture the distribution's peak accurately. To address this, a Square Root Transformation was applied to the dependent variable. This transformation successfully constrained the predictions to positive values and improved the model's fit. The sampling process was also very healthy, with all $\hat{R}$ values hitting 1.00, meaning the chains converged properly. With an effective sample size (Bulk-ESS) of over 3000, we have more than enough "quality" samples to be confident that these results aren't just random noise. The model shows that semantic similarity has a clear negative effect on drawing distance, with an estimate of -0.68. What’s really convincing is the 95% Credible Interval, which ranges from -1.19 to -0.19. Since this entire range stays well below zero, we can be quite sure that the effect is real. In plain terms, when the triggers are semantically similar, participants consistently draw the cities closer together. The evidence gets even stronger when looking at the Probability of Direction (pd), which is a high 99.70%. This tells us it's almost certain that the effect is negative. Additionally, a Bayes Factor of 3.68 gives us "moderate evidence" that including semantic similarity makes for a better model than assuming no effect at all. Overall, the results back up the idea that semantic overlap makes the task easier to process, leading participants to perceive or represent the distance as shorter.
+`<<<<<<< HEAD` YOUR WRITE UP HERE: To investigate the effects of semantic and phonological similarity on drawing distance, I first defined the model formula as Distance \~ Sem \* Phon. To guide the estimation, I specified data-informed priors based on the scale of the raw drawing distances. For the Intercept, I set a normal(77, 50) prior, where 77 reflects the average distance observed in the descriptive statistics. For the coefficients (b), a conservative normal(0, 40) was chosen, and for sigma, an exponential(0.025) prior was applied to ensure a plausible error distribution (targeting an expected residual around 40 units). Initially, a linear model with a Gaussian family was fitted. However, posterior predictive checks indicated that the model failed to respect the physical boundaries of the data (predicting impossible negative distances) and did not capture the distribution's peak accurately. To address this, a Square Root Transformation was applied to the dependent variable. This transformation successfully constrained the predictions to positive values and improved the model's fit. The sampling process was also very healthy, with all $\hat{R}$ values hitting 1.00, meaning the chains converged properly. With an effective sample size (Bulk-ESS) of over 3000, we have more than enough "quality" samples to be confident that these results aren't just random noise. The model shows that semantic similarity has a clear negative effect on drawing distance, with an estimate of -0.68. What’s really convincing is the 95% Credible Interval, which ranges from -1.19 to -0.19. Since this entire range stays well below zero, we can be quite sure that the effect is real. In plain terms, when the triggers are semantically similar, participants consistently draw the cities closer together. The evidence gets even stronger when looking at the Probability of Direction (pd), which is a high 99.70%. This tells us it's almost certain that the effect is negative. Additionally, a Bayes Factor of 3.68 gives us "moderate evidence" that including semantic similarity makes for a better model than assuming no effect at all. Overall, the results back up the idea that semantic overlap makes the task easier to process, leading participants to perceive or represent the distance as shorter.
 
-OPTIONAL (h) compare your interpretation to the original findings
+# OPTIONAL (h) compare your interpretation to the original findings
+
+YOUR WRITE UP HERE
+
+## OPTIONAL (h) compare your interpretation to the original findings
+
+`>>>>>>> d6a130f17d996ec2bda1e007a639b5763ec4f4ae`
 
 YOUR COMPARISON HERE
 

@@ -9,7 +9,7 @@ execute:
   warning: false
   message: false
   cache: false
-bibliography: ../resources/bibliography.bib
+bibliography: ../../resources/bibliography.bib
 ---
 
 # Preamble: Loading packages and configuration
@@ -50,7 +50,7 @@ Let's load in the data and have a look:
 ```{r}
 #| label: load-in
 
-incomplete <- read_csv("../data/incomplete_perception.csv") |> 
+incomplete <- read_csv("../../data/incomplete_perception.csv") |> 
   # preprocessing the data such that everything that ought to be a factor is one
   mutate(listener = as.factor(listener),
          voice = as.factor(voice), 
@@ -78,7 +78,7 @@ These are the variables that you will find within the data:
 
 ### (A) Run a mixed effects model
 
-In their paper, they described different ways how to analyse the perception data. Among other things, they use a generalized linear mixed effects model. While not clearly articulated in the paper, they were mainly interested in whether listeners chose the intended voicing category more often than the unintended one. One way to test this hypothesis is to predict the `chosen_voicing` category by the `correct_voicing` category (i.e. the one that was intended by the speaker).
+In their paper, they described different ways how to analyse the perception data. Among other things, they use a generalized linear mixed effects model. While not clearly articulated in the paper (shame on us), they were mainly interested in whether listeners chose the intended voicing category more often than the unintended one. One way to test this hypothesis is to predict the `chosen_voicing` category by the `correct_voicing` category (i.e. the one that was intended by the speaker).
 
 Build that model with the appropriate random effect structure, taking into account all important grouping variables.
 
@@ -87,10 +87,18 @@ Build that model with the appropriate random effect structure, taking into accou
 ```{r}
 #| label: glmer_incomplete
 
-# YOUR CODE HERE
-library(lme4)
-model <- glmer(chosen_voicing ~ correct_voicing + (1 + correct_voicing| listener) + (1 | item_pair) + (1 | voice), data = incomplete, family = binomial)
-summary(model)
+# There are three grouping variables here that our model should know about: listeners, voices, and item-pairs.
+
+# We should also consider contrast coding the predictor
+contrasts(incomplete$correct_voicing) <- c(-0.5, 0.5)
+
+# Formulate the corresponding GLMER with slopes
+in_glmer <- glmer(chosen_voicing ~ correct_voicing +
+                          (1 + correct_voicing | listener) +
+                          (1 + correct_voicing | item_pair) +
+                          (1 + correct_voicing | voice),
+                        family = "binomial",
+                        data = incomplete)
 
 ```
 
@@ -101,16 +109,29 @@ Interpret the model coefficients and calculate p-values for the relevant predict
 ```{r}
 #| label: interpretation
 
-# YOUR CODE HERE
-model_null <- glmer(chosen_voicing ~ 1 + (1 + correct_voicing | listener) + (1 + correct_voicing| item_pair) + (1 + correct_voicing | voice), 
-                    data = incomplete, family = binomial)
+summary(in_glmer)
 
-anova(model_null, model, test = "Chisq")
-# I have used GLMM to analyse the perception of sound. The dependent variable is chosen_voicing and is predicted by the fixed effect, correct_voicing. To control the non-independence of observations, the model included a maximal random effect structure, including random intercepts for listener, item_pair, and voice. Using random effects helps the model separate the variance of individuals and stimuli from the main effect.
+# Interpretation: 
+# The intercept reflects the log odds of choosing voiceless overall (0.24) corresponding to a slight bias towards voiceless responses (56%).
+# The correct_voicing1 coefficient corresponds to the log odds difference (for responding with voiceless) between stimuli in which correct voicing was voiced vs. voiceless (0.52). We can calculate the predicted probability for both cases like so (remember that we contrast-coded the predictor above) 
+# correct = voiced:     plogis(0.2381 + (-0.5 * 0.5233)) ~49%
+# correct = voiceless:  plogis(0.2381 + (0.5 * 0.5233))  ~62%
 
-# From the results of the model, it shows that correct_voicing has a high statistical value. The Estimate is 0.52, which is a positive value predicting that when correct_voicing changed from voiced to voiceless, there was a higher chance participants chose voiceless. While the intercept is -0.03 (p = 0.908), this means that there isn't any response bias toward one side during the experiment; the participants reacted based on the sound stimuli rather than blindly choosing an answer.( I did add in random slope this time)
+# formulate the corresponding null model without the correct_voicing predictor
+in_glmer_null <- glmer(chosen_voicing ~ 1 +
+                               (1 + correct_voicing | listener) +
+                               (1 + correct_voicing | item_pair) +
+                               (1 + correct_voicing | voice), 
+                             family = "binomial",
+                             data = incomplete)
 
-# Based on the random effects, the voice variance is 0.79, which shows that the quality of pronunciation or the phonetic details of the voice affected significantly whether participants recognized the sound correctly. To re-evaluate the validity of the theory, I have conducted a likelihood ratio test by comparing the full model with a null model only consisting of random effects. The result shows that the model with correct_voicing explains the data better and more clearly. The significant decrease of AIC from 7076 to 7054 once again confirms that correct_voicing is a necessary factor to explain how listeners process sound in this experiment.
+# model comparison
+anova(in_glmer_null, in_glmer)
+# Chisq(df = 1) = 8.181, p = 0.004233
+
+# Interpretation:
+# The effect of correct_voicing is significant at an alpha level of 0.05, i.e. when assuming the null-hypothesis (i.e. the effect of correct voicing does not affect response selection), the observed or more extreme test statistics are too improbable (p = 0.004) such that we can reject the null hypothesis.
+
 ```
 
 ### (C) Plot predictions
@@ -122,20 +143,39 @@ Estimating variance components for linear mixed effects models is mathematically
 ```{r}
 #| label: plot_prediction_in
 
-# YOUR CODE HERE
-library(ggeffects)
-library(ggplot2)
-pred_data <- predict_response(model, terms = "correct_voicing")
-ggplot(pred_data, aes(x=x,y= predicted)) +
-  geom_point(size = 4, color = "royalblue") + geom_errorbar(aes(ymin = conf.low, ymax = conf.high), width = 0.1, color = "royalblue") +
-  labs(
-    title = "Predicted Probability of Choosing 'Voiceless'",
-    subtitle = "Based on Intended Voicing (Correct Voicing)",
-    x = "Intended Voicing (Speaker's Intent)",
-    y = "Probability of Choosing 'Voiceless'"
-  ) +
-  ylim(0, 1) + 
-  theme_minimal()
+# we simply get our estimates and CIs using predict_response()
+mydf <- predict_response(in_glmer, terms = "correct_voicing") |> 
+  # to have clearer variable naming for our ggplot, we wrangle the output a bit
+  rename("correct_voicing" = x)
+
+# and we plot that 
+plot_pred <- 
+  ggplot(data = mydf, 
+         aes(x = correct_voicing,
+             y = predicted,
+             colour = correct_voicing)
+      ) +
+  # chance line
+  geom_hline(yintercept = 0.5, 
+             lty = "dashed") +
+  # titles
+  labs(y = "estimated probability of chosing voiceless\n",
+       x = "\nintended voicing") +
+  scale_y_continuous(limits = c(0,1),
+                     breaks = c(0,0.25,0.5,0.75,1)) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
+plot_pred +
+  # plot uncertainty as error bars
+  geom_errorbar(aes(ymin = conf.low,
+                    ymax = conf.high,
+             group = correct_voicing),
+             color = "black",
+             width = 0.1) +
+  # plot model estimates
+  geom_point(size = 4)
+
 ```
 
 ### (D) OPTIONAL Plot variation across grouping variables
@@ -145,7 +185,56 @@ Compare the descriptive averages for the critical relationship for your grouping
 ```{r}
 #| label: plot_descriptive_in
 
-# YOUR CODE HERE
+# add listener averages
+incomplete_listener <- incomplete |> 
+  group_by(listener, correct_voicing) |> 
+  summarise(predicted = mean(as.numeric(chosen_voicing)-1, na.rm = TRUE))
+
+# add speaker averages
+incomplete_voices <- incomplete |> 
+  group_by(voice, correct_voicing) |> 
+  summarise(predicted = mean(as.numeric(chosen_voicing)-1, na.rm = TRUE))
+
+# add listener averages
+incomplete_items <- incomplete |> 
+  group_by(item_pair, correct_voicing) |> 
+  summarise(predicted = mean(as.numeric(chosen_voicing)-1, na.rm = TRUE))
+
+listener_plot <- plot_pred + 
+  geom_point(data = incomplete_listener,
+             aes(x = correct_voicing,
+                 y = predicted),
+             alpha = 0.5) +
+  geom_line(data = incomplete_listener,
+            aes(group = listener),
+            colour = "grey",
+            alpha = 0.5) +
+  labs(title = "listener variation")
+
+voices_plot <- plot_pred + 
+  geom_point(data = incomplete_voices,
+             aes(x = correct_voicing,
+                 y = predicted),
+             alpha = 0.5) +
+  geom_line(data = incomplete_voices,
+            aes(group = voice),
+            colour = "grey",
+            alpha = 0.5) +
+  labs(title = "speaker variation")
+
+item_plot <- plot_pred + 
+  geom_point(data = incomplete_items,
+             aes(x = correct_voicing,
+                 y = predicted),
+             alpha = 0.5) +
+  geom_line(data = incomplete_items,
+            aes(group = item_pair),
+            colour = "grey",
+            alpha = 0.5) +
+  labs(title = "item variation")
+
+# patchwork together
+listener_plot + voices_plot + item_plot + plot_layout(axes = 'collect')
 
 ```
 
