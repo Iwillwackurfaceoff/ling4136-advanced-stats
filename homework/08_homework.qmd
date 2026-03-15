@@ -63,7 +63,7 @@ We will now retrace the original article's complete analysis. In their original 
 Specify the model formula and appropriate weakly informative priors for all relevant predictors. Contrast-code the predictors.
 
 ```{r}
-#| label: model_formula_sim
+#| label: model_formula_sim.
 my_formula <- bf(Distance~ Sem * Phon)
 get_prior(my_formula, data= sim)
 my_priors <-c(
@@ -71,6 +71,7 @@ my_priors <-c(
   prior(normal(0, 40), class = 'b'),
   prior(exponential(0.025), class = 'sigma')
 )
+
 
 ```
 
