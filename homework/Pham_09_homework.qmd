@@ -1,0 +1,177 @@
+---
+title: "session09 - exercises"
+format: html
+editor: visual
+date: 2025-07-17
+author: Timo Roettger
+execute:
+  error: false
+  warning: false
+  message: false
+  cache: false
+bibliography: ../resources/bibliography.bib
+---
+
+# Preamble: Loading packages and configuration
+
+```{r}
+#| label: data_and_libraries
+#| echo: false
+
+# just run this code chunk
+# function to ignoring the setting of the relative path below when knitting
+run_if_not_knitting <- function(expr) {
+  if (!isTRUE(getOption("knitr.in.progress"))) {
+    eval(expr)
+  }
+}
+
+# nifty code using the pacman package
+# it checks if the packages specified below are installed, if not, they will be installed, if yes, they will be loaded
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rstudioapi, tidyverse, lme4)
+
+# set the current working directory to the one where this file is
+run_if_not_knitting(current_working_dir <- dirname(rstudioapi::getActiveDocumentContext()$path))
+run_if_not_knitting(setwd(current_working_dir))
+
+```
+
+# Introduction
+
+The main **learning goals** of this week's practical parts are:
+
+-   getting an intuition about the gap between verbal hypotheses and formal hypotheses
+
+# The data
+
+In this dataset, we will be analyzing data from @kilpatrick2023random:
+
+In a nutshell, the authors were interested in whether there is a relationship between the form of a word and its meaning by looking at Japanese Pokemon names.
+
+Let's have a look at the data:
+
+```{r}
+#| label: data
+
+# Load in the dataset and already remove irrelevant stuff:
+pokemon <- read_csv('../data/Japanese_Pokemon.csv') |> 
+  select(-`Sum of values`, -Checksum)
+
+# check data set:
+pokemon
+
+```
+
+What you see here are the following variables:
+
+Variables:
+
+`Designation`: source of Pokemon name. Official = the official names of Japanese Pokemon; Elicited = elicited names from naive participants.
+
+`pokemonname`: Pokemon name in Japanese
+
+`Output`: Pokemon name in transcribed form
+
+`Length`: Amount of phones in name
+
+`Evolution`: Evolution stage of Pokemons: 1 = pre-evolution; 2 = post-evolution, NA = do not evolve
+
+`f` = amount of /f/ sounds in name
+
+`T` = amount of /T/ sounds in name
+
+...
+
+and many more different sounds.
+
+Now imagine researchers want to use this data set to *test* the following hypothesis:
+
+*The [evolution stage]{.underline} of a Pokemon is reflected in [aspects of its Japanese name]{.underline}*
+
+# Exercise
+
+## A: Preregister your analysis
+
+Take the hypothesis and what you know about the data set and its structure to predict a very specific relationship that you can test. You are allowed to look at the dataset, but do not look at concrete relationships that might be a manifestation of the hypothesis.
+
+```{r}
+#| label : part A
+#| echo : false 
+# When I look at the dataset, the hypothesis that I assumed is that the level of evolution of the Pokemon will affect the output of their name and its length, so it would be like the longer the name is the higher level of their evolution. I have this theory because subjectively in Japanese they have their own rule to address the social hierarchy similar to Vietnamese or Korean, for example, here in Norway, we call you Timo, but in Japanese, we would call you Roettger sensei because you're our teacher. However, after going through the first check only by eyes a couple name, I realized it's not that simple. Theoretically, I hypothesized that the number of uppercase letters in the name would directly correlate with the Pokemon's evolution stage. However, I must refine this hypothesis because several non-evolving Pokemon (Stage 0) possess more uppercase letters than those in evolved stages. Consequently, instead of a simple linear count, I will investigate how the patterns and rules of using uppercase letters reflect the hierarchical status and evolutionary progression of a Pokemon.
+library(ggplot2)
+name <- pokemon |>
+  mutate(upper_count = str_count(Output,"[A-Z]"),
+         has_internal_stress = upper_count >1,
+         stress_intensity = upper_count / Length) |>
+  mutate(Evolution = replace_na(Evolution,0)) |>
+          mutate(Evo = factor(Evolution, levels = c(0,1,2),
+labels = c("Not evolve","Pre","Post")))
+name 
+ggplot(name, aes(x = Evo, y = upper_count, color = Evo)) +
+  geom_jitter(width = 0.2, alpha = 0.4, size = 2) + 
+  stat_summary(fun = mean, geom = "crossbar", width = 0.55, color = "black") +
+  scale_y_continuous(breaks = 0:5) +
+  labs(title = "Relationship between Evolution Level and Uppercase Count",
+       subtitle = "Hypothesis: Higher Level = More Uppercase Letters?",
+       x = "Evolutionary Level ", 
+       y = "Number of Uppercase Letters ") +
+  theme_minimal() +
+  theme(legend.position = "none")
+#Conclusion: Contrary to my initial hypothesis, based on the chart, there chart shows no clear linear correlation between the level of evolution and the number of the upper case in the output name of the Pokemon :(. It can be seen from the chart that whether they are in level 1 or 2, there are an increase of upper case in their name. However, there are a number of pokemon haven't evolved yet but already have 4 upper case letter in their name, although the number of these pokemons doesn't take the majority, assumingly they are Legendary Pokemon. Same goes with level 1 and 2, there is a few cases that have the same amount of upper case in their name and they stand in both groups. Additionally, some of the names from lv1 and 2 already have 5 upper case letters in their name. While Stage No evolved putliers disrupt the overall statistical correlation, a partial trend shows that when Pokemon evolves, there is a visible shift toward names with more uppercase letters. The lack of a perfect correlation is probably due to the non standardized nature in their elicited names.
+
+```
+
+## B: Run your preregistered analysis
+
+Run the preregistered analysis made in (A) above and interpret your results relative to the hypothesis.
+
+```{r}
+#| label : part B
+#| echo : false 
+model_binary <- glm(has_internal_stress ~ Evo, data = name, family = binomial)
+summary(model_binary)
+#Interpretation: Looking at the Generalized Linear Model (GLM), the story is more nuanced than a simple upward trend. The model shows that Pre-evolved Pokemon do not differ significantly from those that don't evolve (z = -0.92, p = 0.356). However, there is a statistically significant increase for the Post-evolution stage (z = 2.16, p = 0.030). This suggests that the probability of having internal uppercase letters doesn't just grow steadily; it specifically jumps when a Pokemon reaches its final, Post-evolution form. While the relationship is "noisy," reaching the final stage increases the log-odds of having complex naming stress by 0.351 compared to non-evolving Pokemon.
+model_lm <- lm(upper_count ~ Evo, data = name)
+summary(model_lm)
+#Interpretation:The Linear Regression model confirms this "jump" in naming complexity. Again, Pre-evolved Pokemon show no significant increase in uppercase count compared to the baseline (t = -1.26, p = 0.209). But for Post-evolved Pokemon, we see a significant upward shift (t = 1.99, p = 0.047). The estimate of 0.121 means that, on average, a Post-evolution name has about 0.12 more uppercase letters than a non-evolving one. With an R-squared of only 0.011, evolution alone explains a very small part of the naming variance, proving that while a systematic shift exists at the final stage, the overall data remains heavily influenced by other "noisy" factors.Interestingly, even in the models that 'support' the evolution theory (Section B), the effect is not linear. There is no significant difference between non-evolving Pokemon and Pre-evolution stages (p = 0.208). The increase in naming complexity only appears at the final stage (Post-evolution).
+```
+
+## C: Show contradicting results
+
+Now explore the data and find two alternative way to test the research hypothesis that yield convincing results that go in opposite directions based of your findings in (A). Justify all your choices verbally after the fact.
+
+```{r}
+#| label : part C
+#| echo : false 
+
+model_stress <- lm(stress_intensity ~ Evo, data = name)
+summary(model_stress)
+mixed_c <- lmer(stress_intensity ~ Evo + (1 | Designation), data = name)
+summary(mixed_c)
+
+# Interpretation: The strong results from Section B completely fall apart when we shift the metric to stress_intensity (the ratio of uppercase letters to name length). In the Linear Model, the Evolution effect is no longer significant for either stage (EvoPre p = 0.451; EvoPost p = 0.181). This suggests that the "increase" found earlier was merely a byproduct of names getting longer, not a genuine increase in naming complexity.Furthermore, when using a Linear Mixed Model to account for the naming source (Designation), the evidence for evolution vanishes even further. The t-values for EvoPre and EvoPost dropped to -0.129 and 0.431 respectively, which are far below the threshold for significance. The random effects show that Designation (naming source) accounts for a portion of the variance (SD = 0.0099), and the high correlation between the Intercept and Evolution effects (-0.666) indicates that since Pokemon names are already complex at Stage 0 (Intercept = 0.138), there is very little "room" left for evolution to make a meaningful impact.
+```
+
+## D: Researcher degrees of freedom
+
+Note down all dimensions of researcher degrees of freedom that make the mapping of the hypothesis onto your data analysis vague. How many possible combinations can you think of?
+
+```{r}
+#| label : part D
+#| echo : false 
+# The mapping of my hypothesis onto the data is actually quite vague because of the "choices" I had to make during the analysis. In part B, the results from my models show that naming complexity isn't a smooth ladder.  In Section B, the models suggest that naming complexity is not a "smooth ladder." The fact that Pre-evolution stages show no significant difference from Non-evolving ones (p = 0.208), while only Post-evolution shows a marginal effect (p = 0.046), highlights how sensitive the conclusions are to data grouping. If I had consolidated "Pre" and "Post" into a single "Evolved" category, the results would have likely shown a misleadingly high significance.In Section C, I switched to the ratio of uppercase letters per length (stress_intensity). Suddenly, the effect of evolution vanished (p = 0.382).Even further, I could have chosen to only count consonants (since Japanese names often use consonants to add "punch" or "stress") or only count vowels. Choosing one over the other is a "degree of freedom" that lets a researcher manipulate the result.The data isn't uniform. Legendary Pokemon are a huge distraction because they have "prestige" names that are complex regardless of evolution. Also, the Elicited names (from the experiment) might not behave the same as Original game names.As a researcher, I could have chosen to exclude Legendaries or ignore Elicited names to make my p-values look "cleaner." This kind of "p-hacking" is tempting but hides the messy reality of the data.When we multiply all these subjective choices:
+#_ Metric: 3 options (Count, Binary, Ratio)
+#_ Phonetic Filter: 3 options (All letters, Vowels, Consonants)
+#_ Data Selection: 8 options (Include/Exclude Legendaries,Keeping 3 evolution levels vs 2 levels [Merge Pre and Post into 1 vs Not evolve], Keep vs Trim outliers)
+#_ Designation: 2 options (Original vs. Elicited)
+# _ Model Type: 2 options (LM vs. Mixed Model)
+# There are at least 288 different ways (3 x 8 x 3 x 2 x 2) to run this analysis. The fact that Section B "succeeded" while Section C "failed" proves that statistical significance is often a choice, not an objective truth.
+```
+
+# References
+
+<!-- References will auto-populate in the refs div below -->
+
+::: {#refs}
+:::
