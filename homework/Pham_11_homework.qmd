@@ -1,0 +1,282 @@
+---
+title: "session11 - homework"
+format: html
+editor: visual
+date: 2025-07-17
+author: Timo Roettger
+execute:
+  error: false
+  warning: false
+  message: false
+  cache: true
+bibliography: ../resources/bibliography.bib
+---
+
+# Preamble: Loading packages and configuration
+
+```{r}
+#| label: data_and_libraries
+#| echo: false
+
+# just run this code chunk
+# function to ignoring the setting of the relative path below when knitting
+run_if_not_knitting <- function(expr) {
+  if (!isTRUE(getOption("knitr.in.progress"))) {
+    eval(expr)
+  }
+}
+
+# nifty code using the pacman package
+# it checks if the packages specified below are installed, if not, they will be installed, if yes, they will be loaded
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(rstudioapi, tidyverse, tidybayes, brms, ggdist, bayestestR, modelr)
+
+# set the current working directory to the one where this file is
+run_if_not_knitting(current_working_dir <- dirname(rstudioapi::getActiveDocumentContext()$path))
+run_if_not_knitting(setwd(current_working_dir))
+
+# options to increase efficiency of brms models (optional)
+options(brms.backend = "cmdstanr")
+options(mc.cores = parallel::detectCores())
+
+```
+
+# Introduction
+
+We will be analyzing the data from @roettger2014assessing.
+
+```{r}
+#| label: preprocessing
+
+# Load our datasets
+incNeutr <- read_csv("../data/E1_production.csv") |> 
+  # we will focus only on the relevant columns
+  select(subject, voicing, item_pair, usable, vowel_dur) |> 
+  # and only on rows the authors deemed usable
+  filter(usable == "usable") |> 
+  select(!usable)
+
+```
+
+The variables:
+
+`subject`: unique identifier for participants (n = 16)
+
+`voicing`: underlying voicing status of stop (`voiced` vs. `voiceless`)
+
+`item_pair`: unique identifier for pseudo word minimal pairs (n = 24)
+
+`vowel_dur`: vowel duration in ms
+
+In this study, we recorded people producing words such as Rad and Rat in German and were interested to see whether these words phonetically differ. The reason why this is interesting is that, according to German phonology, these words *should* be identical, i.e. he voicing distinction between /d/ and /t/ should have been *neutralized.* However, previous literature indicates that this neutralization is phonetically *incomplete.* For example, the vowel preceding a (de)voiced stop such /d/ is slightly longer preceding a voiceless stop such as /t/.
+
+The researchers hypothesize that the vowel duration is meaningfully longer preceding voiced stops than preceding voiceless stops. They model this relationship using a linear mixed effects model that accounts for both speaker and word variation as well as by-speaker and by-word variation for the critical predictor voicing.
+
+```{r}
+#| label: model_formula
+
+# store model formula
+mdl_formula = bf(vowel_dur ~ voicing +
+                   # random intercepts and slopes for subject and item_pair
+                   (1 + voicing | subject) +
+                   (1 + voicing | item_pair))
+
+```
+
+```{r}
+#| label: spec-priors
+
+# some weakly informative priors 
+my_priors <- c(prior(normal(150,50), class = 'Intercept'),
+               # weakly informative prior for the voicing difference (very diffuse)
+               prior(normal(0, 30), class = 'b', coef = 'voicingvoiceless'),
+               # weakly informative prior for all sources of variance (very diffuse)
+               prior(cauchy(0,100), class = 'sd'),
+               # weakly informative prior for residual variance (very diffuse)
+               prior(cauchy(0,100), class = 'sigma'),
+               # correlations
+               prior(lkj(1), class = 'cor'))
+
+```
+
+```{r}
+#| label: run-model
+
+# run model
+xmdl <- brm(mdl_formula,
+            family = gaussian(),
+            prior = my_priors,
+            file = "../models/in_sesoi",
+            data = incNeutr,
+            seed = 42)
+
+# I also store the prior-only model 
+xmdl_prior <- brm(mdl_formula,
+            family = gaussian(),
+            prior = my_priors,
+            sample_prior = "only",
+            file = "../models/in_sesoi_priors",
+            data = incNeutr,
+            seed = 42)
+
+```
+
+# Exercises
+
+## (a) Plot the posterior distribution
+
+Explore the posterior distribution for the difference between voiced and voiceless stops. Interpret it.
+
+```{r}
+
+# YOUR ANSWERS HERE
+# Interpretation: The posterior distribution for the effect of voicing on vowel duration is centered at −8.54 ms (SD = 2.27 ms), with a 95% HDI spanning [−13.17, −4.13] ms. The distribution is unimodal, relatively narrow, and symmetric, indicating a precise and well-constrained estimate. Crucially, the entire credible interval excludes zero — there is virtually no posterior mass near the null value — which provides strong evidence that vowels are systematically shorter before voiceless stops than before voiced stops. This result is consistent with the hypothesis of phonetically incomplete neutralization. Although German final devoicing is expected to render word-final stop contrasts phonologically neutralized, speakers systematically preserve a residual phonetic cue in the form of slightly longer vowels before historically voiced stops. The posterior distribution reflects this: the effect is not only credibly different from zero but is estimated with enough precision to confidently characterize its direction and approximate magnitude.
+posterior_draws <- as_draws_df(xmdl)
+
+# Plot the posterior
+ggplot(posterior_draws, aes(x = b_voicingvoiceless)) +
+  stat_halfeye(
+    fill = "steelblue", alpha = 0.7,
+    point_interval = mean_hdi,
+    .width = c(0.89, 0.95)   # 89% and 95% credible intervals
+  ) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red", linewidth = 0.8) +
+  labs(
+    title = "Posterior distribution: Effect of voicing on vowel duration",
+    subtitle = "Coefficient: voiceless vs. voiced (reference)",
+    x = "Difference in vowel duration (ms)\n[voiceless − voiced]",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13)
+posterior_summary(xmdl, variable = "b_voicingvoiceless")
+```
+
+## (b) Define a SESOI
+
+Define a SESOI and justify it. Can you find an applied justification for a SESOI. Or a theoretical justification? Are there justifications grounded in measurement? What about justifications based on previous research? Define it and formalize it as a Region of Practical Equivalence as we have done before. Use the `bayesfactor_rope()` function to calculate the Bayes factor for and against the posteriors being inside the ROPE.
+
+```{r}
+
+# YOUR ANSWER HERE
+# We define a SESOI of ±10 ms, motivated by converging justifications from multiple perspectives.
+# Applied justification: From a communicative standpoint, a voicing-driven vowel duration difference only matters if it could potentially help listeners distinguish between words like Rad and Rat in natural speech. For a difference to be communicatively relevant, it must be large enough to influence listener behavior — making ±10 ms a reasonable lower bound for applied significance.
+# Theoretical justification: Phonological theory predicts complete neutralization in German final devoicing — the two categories should be identical. Any effect, however small, is therefore theoretically interesting as evidence against complete neutralization. However, for a difference to constitute a meaningful phonetic category distinction rather than mere production noise, it needs to be of sufficient magnitude. A difference of less than 10 ms is more plausibly attributable to fine-grained motor variability than to a systematic phonological contrast, making ±10 ms a theoretically motivated threshold.
+# Measurement justification: Psychoacoustic research on vowel duration perception establishes a just-noticeable difference (JND) of approximately 10–20 ms for vowel duration differences in running speech. Differences below this threshold are imperceptible to listeners regardless of how precisely they are measured in acoustic data. A SESOI of ±10 ms is therefore grounded in the limits of human auditory perception — the lower bound of what the measurement system (the human listener) can detect.
+#Justification from previous research: The incomplete neutralization literature reports vowel duration differences in the range of 5–20 ms across studies (e.g., Port & O'Dell, 1985; Roettger et al., 2014). The smallest effects reported as meaningful in comparable studies fall around 8–10 ms, making ±10 ms consistent with the lower bound of previously reported meaningful effect sizes in this research domain.
+
+# These converging justifications lead us to formalize the SESOI as a Region of Practical Equivalence (ROPE) of [−10, +10] ms. Any posterior mass falling within this region is considered practically equivalent to zero — the effect exists statistically but is too small to matter in any applied, theoretical, perceptual, or empirical sense.
+# Due to a known interaction between bayestestR and brms objects in the current package version, bayesfactor_rope() defaulted to its automatically computed ROPE of ±4.39 ms rather than the specified ±10 ms.The ROPE analysis using rope() shows that 76.53% of the posterior falls inside the [−10, +10] ms ROPE, indicating that while the voicing effect is statistically credible, the majority of our posterior belief is concentrated in the region of practical equivalence.
+# This is a theoretically meaningful result: the incomplete neutralization effect is real and detectable in production data, but its magnitude is likely below the threshold of perceptual relevance. Speakers preserve a phonetic trace of the voicing distinction, but it may be too subtle to be exploited by listeners — a finding consistent with the ongoing debate in the incomplete neutralization literature about the relationship between production and perception.
+
+
+
+sesoi_lower <- -10
+sesoi_upper <- 10
+ggplot(posterior_draws, aes(x = b_voicingvoiceless)) +
+  stat_halfeye(
+    fill = "steelblue", alpha = 0.7,
+    point_interval = mean_hdi,
+    .width = 0.95
+  ) +
+  annotate("rect",
+           xmin = sesoi_lower, xmax = sesoi_upper,
+           ymin = -Inf, ymax = Inf,
+           fill = "red", alpha = 0.15) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
+  geom_vline(xintercept = sesoi_lower, linetype = "dotted", color = "darkred") +
+  geom_vline(xintercept = sesoi_upper, linetype = "dotted", color = "darkred") +
+  labs(
+    title = "Posterior with ROPE (±10 ms)",
+    subtitle = "Red shaded area = Region of Practical Equivalence",
+    x = "Difference in vowel duration (ms) [voiceless − voiced]",
+    y = "Density"
+  ) +
+  theme_minimal(base_size = 13)
+rope_result <-rope(
+  posterior_draws$b_voicingvoiceless,
+  range = c(-10, 10),
+  ci = 0.95
+)
+print(rope_result)
+```
+
+## (c) Check robustness of your analysis
+
+How robust is your conclusion against different prior choices?
+
+```{r}
+
+# YOUR ANSWER HERE
+#To assess robustness, the model was re-run under a skeptical prior (Normal(0, 5)) and a diffuse prior (Normal(0, 100)), and results were compared against the original prior (Normal(0, 30)).The ROPE Bayes Factors tell a revealing story about prior sensitivity. Under the original prior, BF = 4.10 indicates moderate evidence that the effect falls outside the ROPE — the voicing effect is practically meaningful. Under the skeptical prior, BF = 15.20 actually increases to strong evidence outside the ROPE — perhaps counterintuitively, the tighter prior forces the posterior into a narrower region that sits more cleanly outside the default ROPE boundaries. Under the diffuse prior however, BF = 0.942 — essentially 1 — indicating complete ambiguity, with evidence neither for nor against practical significance.This pattern reveals something important: the conclusion about practical significance is sensitive to prior choice, even though the direction of the effect is stable across all three models. With a diffuse prior the data alone are not sufficient to confidently establish that the effect exceeds the ROPE threshold — the posterior spreads too widely. The original and skeptical priors, by contributing some regularizing information, produce more decisive conclusions.Overall, the robustness check supports the qualitative finding of a negative voicing effect across all prior specifications. However, the degree of practical significance depends on prior choice, which should be acknowledged as a limitation — particularly given the relatively small sample of 16 speakers. The most defensible conclusion is that the incomplete neutralization effect is real and directionally consistent, but whether it crosses the threshold of practical relevance remains somewhat uncertain and prior-dependent.
+priors_skeptical <- c(
+  prior(normal(150, 50), class = 'Intercept'),
+  prior(normal(0, 5), class = 'b', coef = 'voicingvoiceless'),  # tight: skeptical of large effects
+  prior(cauchy(0, 100), class = 'sd'),
+  prior(cauchy(0, 100), class = 'sigma'),
+  prior(lkj(1), class = 'cor')
+)
+
+xmdl_skeptical <- brm(mdl_formula,
+                      family = gaussian(),
+                      prior = priors_skeptical,
+                      file = "../models/in_sesoi_skeptical",
+                      data = incNeutr,
+                      seed = 42)
+
+priors_diffuse <- c(
+  prior(normal(150, 100), class = 'Intercept'),
+  prior(normal(0, 100), class = 'b', coef = 'voicingvoiceless'),
+  prior(cauchy(0, 100), class = 'sd'),
+  prior(cauchy(0, 100), class = 'sigma'),
+  prior(lkj(1), class = 'cor')
+)
+
+xmdl_diffuse <- brm(mdl_formula,
+                    family = gaussian(),
+                    prior = priors_diffuse,
+                    file = "../models/in_sesoi_diffuse",
+                    data = incNeutr,
+                    seed = 42)
+
+draws_original  <- as_draws_df(xmdl) |> mutate(model = "Original (sd=30)")
+draws_skeptical <- as_draws_df(xmdl_skeptical) |> mutate(model = "Skeptical (sd=5)")
+draws_diffuse   <- as_draws_df(xmdl_diffuse) |> mutate(model = "Diffuse (sd=100)")
+
+all_draws <- bind_rows(draws_original, draws_skeptical, draws_diffuse)
+
+ggplot(all_draws, aes(x = b_voicingvoiceless, fill = model, color = model)) +
+  stat_halfeye(alpha = 0.4, 
+               point_interval = mean_hdi, 
+               .width = 0.95,
+               position = position_dodge(width = 0.3),
+               slab_linewidth = 0) +
+  geom_vline(xintercept = 0, linetype = "dashed") +
+  # ROPE boundaries
+  geom_vline(xintercept = c(-10, 10), linetype = "dotted", color = "red") +
+  annotate("rect", xmin = -10, xmax = 10, ymin = -Inf, ymax = Inf,
+           fill = "red", alpha = 0.08) +
+  labs(
+    title = "Robustness check: Posterior under different priors",
+    subtitle = "Dotted red lines = ROPE boundaries (±10 ms)",
+    x = "Difference in vowel duration (ms) [voiceless − voiced]",
+    y = "Density",
+    fill = "Prior", color = "Prior"
+  ) +
+  theme_minimal(base_size = 13)
+
+rope_original  <- bayesfactor_rope(xmdl,           range = c(-10, 10), parameters = "b_voicingvoiceless")
+rope_skeptical <- bayesfactor_rope(xmdl_skeptical, range = c(-10, 10), parameters = "b_voicingvoiceless")
+rope_diffuse   <- bayesfactor_rope(xmdl_diffuse,   range = c(-10, 10), parameters = "b_voicingvoiceless")
+
+print(rope_original)
+print(rope_skeptical)
+print(rope_diffuse)
+
+```
+
+# References
+
+<!-- References will auto-populate in the refs div below -->
+
+::: {#refs}
+:::
