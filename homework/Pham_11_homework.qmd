@@ -158,45 +158,10 @@ Define a SESOI and justify it. Can you find an applied justification for a SESOI
 ```{r}
 
 # YOUR ANSWER HERE
-# We define a SESOI of ±10 ms, motivated by converging justifications from multiple perspectives.
-# Applied justification: From a communicative standpoint, a voicing-driven vowel duration difference only matters if it could potentially help listeners distinguish between words like Rad and Rat in natural speech. For a difference to be communicatively relevant, it must be large enough to influence listener behavior — making ±10 ms a reasonable lower bound for applied significance.
-# Theoretical justification: Phonological theory predicts complete neutralization in German final devoicing — the two categories should be identical. Any effect, however small, is therefore theoretically interesting as evidence against complete neutralization. However, for a difference to constitute a meaningful phonetic category distinction rather than mere production noise, it needs to be of sufficient magnitude. A difference of less than 10 ms is more plausibly attributable to fine-grained motor variability than to a systematic phonological contrast, making ±10 ms a theoretically motivated threshold.
-# Measurement justification: Psychoacoustic research on vowel duration perception establishes a just-noticeable difference (JND) of approximately 10–20 ms for vowel duration differences in running speech. Differences below this threshold are imperceptible to listeners regardless of how precisely they are measured in acoustic data. A SESOI of ±10 ms is therefore grounded in the limits of human auditory perception — the lower bound of what the measurement system (the human listener) can detect.
-#Justification from previous research: The incomplete neutralization literature reports vowel duration differences in the range of 5–20 ms across studies (e.g., Port & O'Dell, 1985; Roettger et al., 2014). The smallest effects reported as meaningful in comparable studies fall around 8–10 ms, making ±10 ms consistent with the lower bound of previously reported meaningful effect sizes in this research domain.
-
-# These converging justifications lead us to formalize the SESOI as a Region of Practical Equivalence (ROPE) of [−10, +10] ms. Any posterior mass falling within this region is considered practically equivalent to zero — the effect exists statistically but is too small to matter in any applied, theoretical, perceptual, or empirical sense.
-# Due to a known interaction between bayestestR and brms objects in the current package version, bayesfactor_rope() defaulted to its automatically computed ROPE of ±4.39 ms rather than the specified ±10 ms.The ROPE analysis using rope() shows that 76.53% of the posterior falls inside the [−10, +10] ms ROPE, indicating that while the voicing effect is statistically credible, the majority of our posterior belief is concentrated in the region of practical equivalence.
-# This is a theoretically meaningful result: the incomplete neutralization effect is real and detectable in production data, but its magnitude is likely below the threshold of perceptual relevance. Speakers preserve a phonetic trace of the voicing distinction, but it may be too subtle to be exploited by listeners — a finding consistent with the ongoing debate in the incomplete neutralization literature about the relationship between production and perception.
-
-
-
-sesoi_lower <- -10
-sesoi_upper <- 10
-ggplot(posterior_draws, aes(x = b_voicingvoiceless)) +
-  stat_halfeye(
-    fill = "steelblue", alpha = 0.7,
-    point_interval = mean_hdi,
-    .width = 0.95
-  ) +
-  annotate("rect",
-           xmin = sesoi_lower, xmax = sesoi_upper,
-           ymin = -Inf, ymax = Inf,
-           fill = "red", alpha = 0.15) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "red") +
-  geom_vline(xintercept = sesoi_lower, linetype = "dotted", color = "darkred") +
-  geom_vline(xintercept = sesoi_upper, linetype = "dotted", color = "darkred") +
-  labs(
-    title = "Posterior with ROPE (±10 ms)",
-    subtitle = "Red shaded area = Region of Practical Equivalence",
-    x = "Difference in vowel duration (ms) [voiceless − voiced]",
-    y = "Density"
-  ) +
-  theme_minimal(base_size = 13)
-rope_result <-rope(
-  posterior_draws$b_voicingvoiceless,
-  range = c(-10, 10),
-  ci = 0.95
-)
+rope <- c(-10,10)
+rope_result <- bayesfactor_rope(posterior=xmdl,
+                                null= rope, 
+                                parameter= 'b_voicingvoiceless')
 print(rope_result)
 ```
 
@@ -242,27 +207,7 @@ draws_original  <- as_draws_df(xmdl) |> mutate(model = "Original (sd=30)")
 draws_skeptical <- as_draws_df(xmdl_skeptical) |> mutate(model = "Skeptical (sd=5)")
 draws_diffuse   <- as_draws_df(xmdl_diffuse) |> mutate(model = "Diffuse (sd=100)")
 
-all_draws <- bind_rows(draws_original, draws_skeptical, draws_diffuse)
 
-ggplot(all_draws, aes(x = b_voicingvoiceless, fill = model, color = model)) +
-  stat_halfeye(alpha = 0.4, 
-               point_interval = mean_hdi, 
-               .width = 0.95,
-               position = position_dodge(width = 0.3),
-               slab_linewidth = 0) +
-  geom_vline(xintercept = 0, linetype = "dashed") +
-  # ROPE boundaries
-  geom_vline(xintercept = c(-10, 10), linetype = "dotted", color = "red") +
-  annotate("rect", xmin = -10, xmax = 10, ymin = -Inf, ymax = Inf,
-           fill = "red", alpha = 0.08) +
-  labs(
-    title = "Robustness check: Posterior under different priors",
-    subtitle = "Dotted red lines = ROPE boundaries (±10 ms)",
-    x = "Difference in vowel duration (ms) [voiceless − voiced]",
-    y = "Density",
-    fill = "Prior", color = "Prior"
-  ) +
-  theme_minimal(base_size = 13)
 
 rope_original  <- bayesfactor_rope(xmdl,           range = c(-10, 10), parameters = "b_voicingvoiceless")
 rope_skeptical <- bayesfactor_rope(xmdl_skeptical, range = c(-10, 10), parameters = "b_voicingvoiceless")
